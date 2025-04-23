@@ -1,0 +1,26 @@
+{
+	"name": "3msd-bot",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"start": "node bot.js"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/HromasDev/3msd_bot.git"
+	},
+	"author": "",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/HromasDev/3msd_bot/issues"
+	},
+	"homepage": "https://github.com/HromasDev/3msd_bot#readme",
+	"devDependencies": {
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"dotenv": "^16.5.0",
+		"grammy": "^1.36.1"
+	}
+}
