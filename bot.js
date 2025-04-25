@@ -85,11 +85,9 @@ units.forEach((unit) => {
 		const userId = ctx.from.id;
 		userState[userId] = {
 			unit: unit,
-			step: 'ask_soldier_info',
+			step: 'ask_soldier_fio',
 		};
-		await ctx.reply(
-			'Заполните сведения военнослужащего:\nФ.И.О., Дата рождения, личный номер\n(если не знаете личный номер, оставьте пустую строку)'
-		);
+		await ctx.reply('Введите ФИО военнослужащего:');
 		await ctx.answerCallbackQuery();
 	});
 });
@@ -97,26 +95,77 @@ units.forEach((unit) => {
 bot.on('message:text', async (ctx) => {
 	const userId = ctx.from.id;
 	const state = userState[userId];
+	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
 
 	if (!state) return;
 
-	if (state.step === 'ask_soldier_info') {
-		state.soldierInfo = ctx.message.text;
-		state.step = 'ask_requester_info';
+	if (state.step === 'ask_soldier_fio') {
+		if (ctx.message.text.length < 5) {
+			return await ctx.reply(
+				'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+			);
+		}
+		state.soldierFio = ctx.message.text;
+		state.step = 'ask_soldier_birthdate';
 		await ctx.reply(
-			'Укажите, кем вы являетесь военнослужащему, и свои персональные данные (Ф.И.О., контактный номер для связи):'
+			'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
 		);
-	} else if (state.step === 'ask_requester_info') {
-		state.requesterInfo = ctx.message.text;
+	} else if (state.step === 'ask_soldier_birthdate') {
+		// Простая проверка формата даты (можно улучшить)
+		if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
+			return await ctx.reply(
+				'Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:'
+			);
+		}
+		state.soldierBirthdate = ctx.message.text;
+		state.step = 'ask_soldier_number';
+		await ctx.reply(
+			'Введите личный номер военнослужащего (если не знаете, отправьте "-"):'
+		);
+	} else if (state.step === 'ask_soldier_number') {
+		state.soldierNumber =
+			ctx.message.text === '-' ? 'не указан' : ctx.message.text;
+		state.step = 'ask_requester_relation';
+		await ctx.reply(
+			'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
+		);
+	} else if (state.step === 'ask_requester_relation') {
+		state.requesterRelation = ctx.message.text;
+		state.step = 'ask_requester_fio';
+		await ctx.reply('Введите ваше ФИО:');
+	} else if (state.step === 'ask_requester_fio') {
+		if (ctx.message.text.length < 5) {
+			return await ctx.reply(
+				'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+			);
+		}
+		state.requesterFio = ctx.message.text;
+		state.step = 'ask_requester_phone';
+		await ctx.reply('Введите ваш контактный номер телефона:');
+	} else if (state.step === 'ask_requester_phone') {
+		// Простая проверка номера телефона (можно улучшить)
+		if (ctx.message.text.length < 5) {
+			return await ctx.reply(
+				'Номер телефона слишком короткий. Пожалуйста, введите снова:'
+			);
+		}
+		state.requesterPhone = ctx.message.text;
 
-		// формируем сообщение
+		// Формируем сообщение для группы
 		const message =
 			`📌 **Новый запрос**\n\n` +
 			`**Войсковая часть:** ${state.unit}\n\n` +
-			`**Данные военнослужащего:**\n${state.soldierInfo}\n\n` +
-			`**Данные заявителя:**\n${state.requesterInfo}`;
+			`**Данные военнослужащего:**\n` +
+			`ФИО: ${state.soldierFio}\n` +
+			`Дата рождения: ${state.soldierBirthdate}\n` +
+			`Личный номер: ${state.soldierNumber}\n\n` +
+			`**Данные заявителя:**\n` +
+			`Кем приходится: ${state.requesterRelation}\n` +
+			`ФИО: ${state.requesterFio}\n` +
+			`Телефон: ${state.requesterPhone}\n` +
+			`Контакт: ${username}`;
 
-		const threadId = TOPICS[state.unit].active || TOPICS['other'].active;
+		const threadId = TOPICS[state.unit]?.active || TOPICS['other'].active;
 		await ctx.api.sendMessage(GROUP_ID, message, {
 			message_thread_id: threadId,
 			parse_mode: 'Markdown',
