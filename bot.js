@@ -37,13 +37,6 @@ const TOPICS = {
 	},
 };
 
-bot.command('abonent', async (ctx) => {
-	await ctx.reply(
-		'Здравствуйте, вы обратились на горячую линию 3 мотострелковой дивизии 20 гвардейской общевойсковой армии Московского военного округа!'
-	);
-	await askQuestion(ctx);
-});
-
 async function askQuestion(ctx) {
 	const keyboard = new InlineKeyboard().text(
 		'Выбрать войсковую часть',
@@ -68,7 +61,7 @@ bot.callbackQuery('select_unit', async (ctx) => {
 		.row()
 		.text('237 тп', 'unit_237tp')
 		.row()
-		.text('другие', 'unit_other');
+		.text('другие', 'unit_3msd');
 
 	await ctx.reply(
 		'Выберите войсковую часть, в которой проходит службу военнослужащего:',
@@ -79,7 +72,7 @@ bot.callbackQuery('select_unit', async (ctx) => {
 });
 
 // Обработчики выбора части
-const units = ['3msd', '245msp', '252msp', '752msp', '237tp', 'other'];
+const units = ['3msd', '245msp', '252msp', '752msp', '237tp', '3msd'];
 units.forEach((unit) => {
 	bot.callbackQuery(`unit_${unit}`, async (ctx) => {
 		const userId = ctx.from.id;
@@ -97,6 +90,12 @@ bot.on('message:text', async (ctx) => {
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
 
+	if (ctx.message.text.startsWith('/')) {
+		await ctx.reply(
+			'Здравствуйте, вы обратились на горячую линию 3 мотострелковой дивизии 20 гвардейской общевойсковой армии Московского военного округа!'
+		);
+		await askQuestion(ctx);
+	}
 	if (!state) return;
 
 	if (state.step === 'ask_soldier_fio') {
@@ -153,13 +152,13 @@ bot.on('message:text', async (ctx) => {
 
 		// Формируем сообщение для группы
 		const message =
-			`📌 **Новый запрос**\n\n` +
-			`**Войсковая часть:** ${state.unit}\n\n` +
-			`**Данные военнослужащего:**\n` +
+			`📌 Новый запрос\n\n` +
+			`Войсковая часть: ${state.unit}\n\n` +
+			`Данные военнослужащего:\n` +
 			`ФИО: ${state.soldierFio}\n` +
 			`Дата рождения: ${state.soldierBirthdate}\n` +
 			`Личный номер: ${state.soldierNumber}\n\n` +
-			`**Данные заявителя:**\n` +
+			`Данные заявителя:\n` +
 			`Кем приходится: ${state.requesterRelation}\n` +
 			`ФИО: ${state.requesterFio}\n` +
 			`Телефон: ${state.requesterPhone}\n` +
@@ -168,7 +167,7 @@ bot.on('message:text', async (ctx) => {
 		const threadId = TOPICS[state.unit]?.active || TOPICS['other'].active;
 		await ctx.api.sendMessage(GROUP_ID, message, {
 			message_thread_id: threadId,
-			parse_mode: 'Markdown',
+			parse_mode: 'HTML',
 		});
 
 		await ctx.reply(
