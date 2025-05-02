@@ -1,49 +1,72 @@
 const { Bot, InlineKeyboard } = require('grammy');
 require('dotenv').config();
 
-const bot = new Bot(process.env.TOKEN); // Токен бота
+// Проверка переменных окружения
+if (!process.env.TOKEN || !process.env.CHAT_ID) {
+	console.error('Ошибка: Не указаны TOKEN или CHAT_ID в .env файле!');
+	process.exit(1);
+}
 
+const bot = new Bot(process.env.TOKEN);
 const userState = {};
+const GROUP_ID = process.env.CHAT_ID;
 
-// ID группы и тем
-const GROUP_ID = process.env.CHAT_ID; // Основной chat_id группы
-
-// ID топиков
+// Конфигурация топиков
 const TOPICS = {
-	// топик упр. 3 мсд и другие
-	'3msd': {
-		active: 10,
-		completed: 12,
-	},
-	// топик 245 мсп
-	'245msp': {
-		active: 8,
-		completed: 20,
-	},
-	// топик 252 мсп
-	'252msp': {
-		active: 2,
-		completed: 14,
-	},
-	// топик 752 мсп
-	'752msp': {
-		active: 4,
-		completed: 16,
-	},
-	// топик 237 тп
-	'237tp': {
-		active: 6,
-		completed: 18,
-	},
+	'3msd': { active: 10, completed: 12 },
+	'245msp': { active: 8, completed: 20 },
+	'252msp': { active: 2, completed: 14 },
+	'752msp': { active: 4, completed: 16 },
+	'237tp': { active: 6, completed: 18 },
+	other: { active: 10, completed: 12 },
 };
 
+// Функция для безопасной отправки сообщений
+async function safeReply(ctx, text, options = {}) {
+	try {
+		await ctx.reply(text, options);
+		return true;
+	} catch (error) {
+		if (
+			error.description &&
+			error.description.includes('bot was blocked by the user')
+		) {
+			console.log(`Пользователь ${ctx.from.id} заблокировал бота`);
+			delete userState[ctx.from.id];
+		} else {
+			console.error('Ошибка при отправке сообщения:', error);
+		}
+		return false;
+	}
+}
+
+// Функция для отправки сообщения в группу
+async function sendToGroup(ctx, message, unit) {
+	try {
+		const threadId = TOPICS[unit]?.active || TOPICS['other'].active;
+		await ctx.api.sendMessage(GROUP_ID, message, {
+			message_thread_id: threadId,
+			parse_mode: 'HTML',
+		});
+		return true;
+	} catch (error) {
+		console.error('Ошибка при отправке в группу:', error);
+		await safeReply(
+			ctx,
+			'⚠️ Ошибка при отправке запроса. Пожалуйста, попробуйте позже.'
+		);
+		return false;
+	}
+}
+
+// Функция для вопроса с кнопками
 async function askQuestion(ctx) {
 	const keyboard = new InlineKeyboard().text(
 		'Выбрать войсковую часть',
 		'select_unit'
 	);
 
-	await ctx.reply('Пожалуйста, выберите интересующий вас вопрос:', {
+	await safeReply(ctx, 'Пожалуйста, выберите интересующий вас вопрос:', {
 		reply_markup: keyboard,
 	});
 }
@@ -61,121 +84,157 @@ bot.callbackQuery('select_unit', async (ctx) => {
 		.row()
 		.text('237 тп', 'unit_237tp')
 		.row()
-		.text('другие', 'unit_3msd');
+		.text('другие', 'unit_other');
 
-	await ctx.reply(
+	await safeReply(
+		ctx,
 		'Выберите войсковую часть, в которой проходит службу военнослужащего:',
-		{
-			reply_markup: keyboard,
-		}
+		{ reply_markup: keyboard }
 	);
-});
 
+	try {
+		await ctx.answerCallbackQuery();
+	} catch (error) {
+		console.warn('Не удалось выполнить answerCallbackQuery:', error.message);
+	}
+});
 // Обработчики выбора части
-const units = ['3msd', '245msp', '252msp', '752msp', '237tp', '3msd'];
+const units = ['3msd', '245msp', '252msp', '752msp', '237tp', 'other'];
 units.forEach((unit) => {
 	bot.callbackQuery(`unit_${unit}`, async (ctx) => {
-		const userId = ctx.from.id;
-		userState[userId] = {
+		userState[ctx.from.id] = {
 			unit: unit,
 			step: 'ask_soldier_fio',
 		};
-		await ctx.reply('Введите ФИО военнослужащего:');
+		await safeReply(ctx, 'Введите ФИО военнослужащего:');
 		await ctx.answerCallbackQuery();
 	});
 });
 
+// Обработчик текстовых сообщений
 bot.on('message:text', async (ctx) => {
 	const userId = ctx.from.id;
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
 
 	if (ctx.message.text.startsWith('/')) {
-		await ctx.reply(
+		await safeReply(
+			ctx,
 			'Здравствуйте, вы обратились на горячую линию 3 мотострелковой дивизии 20 гвардейской общевойсковой армии Московского военного округа!'
 		);
 		await askQuestion(ctx);
 	}
 	if (!state) return;
 
-	if (state.step === 'ask_soldier_fio') {
-		if (ctx.message.text.length < 5) {
-			return await ctx.reply(
-				'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
-			);
-		}
-		state.soldierFio = ctx.message.text;
-		state.step = 'ask_soldier_birthdate';
-		await ctx.reply(
-			'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
-		);
-	} else if (state.step === 'ask_soldier_birthdate') {
-		// Простая проверка формата даты (можно улучшить)
-		if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
-			return await ctx.reply(
-				'Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:'
-			);
-		}
-		state.soldierBirthdate = ctx.message.text;
-		state.step = 'ask_soldier_number';
-		await ctx.reply(
-			'Введите личный номер военнослужащего (если не знаете, отправьте "-"):'
-		);
-	} else if (state.step === 'ask_soldier_number') {
-		state.soldierNumber =
-			ctx.message.text === '-' ? 'не указан' : ctx.message.text;
-		state.step = 'ask_requester_relation';
-		await ctx.reply(
-			'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
-		);
-	} else if (state.step === 'ask_requester_relation') {
-		state.requesterRelation = ctx.message.text;
-		state.step = 'ask_requester_fio';
-		await ctx.reply('Введите ваше ФИО:');
-	} else if (state.step === 'ask_requester_fio') {
-		if (ctx.message.text.length < 5) {
-			return await ctx.reply(
-				'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
-			);
-		}
-		state.requesterFio = ctx.message.text;
-		state.step = 'ask_requester_phone';
-		await ctx.reply('Введите ваш контактный номер телефона:');
-	} else if (state.step === 'ask_requester_phone') {
-		// Простая проверка номера телефона (можно улучшить)
-		if (ctx.message.text.length < 5) {
-			return await ctx.reply(
-				'Номер телефона слишком короткий. Пожалуйста, введите снова:'
-			);
-		}
-		state.requesterPhone = ctx.message.text;
+	try {
+		switch (state.step) {
+			case 'ask_soldier_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.soldierFio = ctx.message.text;
+				state.step = 'ask_soldier_birthdate';
+				await safeReply(
+					ctx,
+					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
+				);
+				break;
 
-		// Формируем сообщение для группы
-		const message =
-			`📌 Новый запрос\n\n` +
-			`Войсковая часть: ${state.unit}\n\n` +
-			`Данные военнослужащего:\n` +
-			`ФИО: ${state.soldierFio}\n` +
-			`Дата рождения: ${state.soldierBirthdate}\n` +
-			`Личный номер: ${state.soldierNumber}\n\n` +
-			`Данные заявителя:\n` +
-			`Кем приходится: ${state.requesterRelation}\n` +
-			`ФИО: ${state.requesterFio}\n` +
-			`Телефон: ${state.requesterPhone}\n` +
-			`Контакт: ${username}`;
+			case 'ask_soldier_birthdate':
+				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
+					await safeReply(
+						ctx,
+						'Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:'
+					);
+					return;
+				}
+				state.soldierBirthdate = ctx.message.text;
+				state.step = 'ask_soldier_number';
+				await safeReply(
+					ctx,
+					'Введите личный номер военнослужащего (если не знаете, отправьте "-"):'
+				);
+				break;
 
-		const threadId = TOPICS[state.unit]?.active || TOPICS['other'].active;
-		await ctx.api.sendMessage(GROUP_ID, message, {
-			message_thread_id: threadId,
-			parse_mode: 'HTML',
-		});
+			case 'ask_soldier_number':
+				state.soldierNumber =
+					ctx.message.text === '-' ? 'не указан' : ctx.message.text;
+				state.step = 'ask_requester_relation';
+				await safeReply(
+					ctx,
+					'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
+				);
+				break;
 
-		await ctx.reply(
-			'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
-		);
+			case 'ask_requester_relation':
+				state.requesterRelation = ctx.message.text;
+				state.step = 'ask_requester_fio';
+				await safeReply(ctx, 'Введите ваше ФИО:');
+				break;
+
+			case 'ask_requester_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterFio = ctx.message.text;
+				state.step = 'ask_requester_phone';
+				await safeReply(ctx, 'Введите ваш контактный номер телефона:');
+				break;
+
+			case 'ask_requester_phone':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'Номер телефона слишком короткий. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterPhone = ctx.message.text;
+
+				const message =
+					`📌 Новый запрос\n\n` +
+					`Войсковая часть: ${state.unit}\n\n` +
+					`Данные военнослужащего:\n` +
+					`ФИО: ${state.soldierFio}\n` +
+					`Дата рождения: ${state.soldierBirthdate}\n` +
+					`Личный номер: ${state.soldierNumber}\n\n` +
+					`Данные заявителя:\n` +
+					`Кем приходится: ${state.requesterRelation}\n` +
+					`ФИО: ${state.requesterFio}\n` +
+					`Телефон: ${state.requesterPhone}\n` +
+					`Контакт: ${username}`;
+
+				const success = await sendToGroup(ctx, message, state.unit);
+				if (success) {
+					await safeReply(
+						ctx,
+						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
+					);
+				}
+				delete userState[userId];
+				break;
+		}
+	} catch (error) {
+		console.error('Ошибка в обработчике сообщений:', error);
 		delete userState[userId];
 	}
 });
 
-bot.start();
-console.log('Бот запущен!');
+// Обработчик ошибок
+bot.catch((err) => {
+	console.error('Ошибка в боте:', err);
+});
+
+// Запуск бота
+bot
+	.start()
+	.then(() => console.log('Бот успешно запущен!'))
+	.catch((err) => console.error('Ошибка при запуске бота:', err));
