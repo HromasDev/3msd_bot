@@ -59,20 +59,7 @@ async function sendToGroup(ctx, message, unit) {
 	}
 }
 
-// Функция для вопроса с кнопками
-async function askQuestion(ctx) {
-	const keyboard = new InlineKeyboard().text(
-		'Выбрать войсковую часть',
-		'select_unit'
-	);
-
-	await safeReply(ctx, 'Пожалуйста, выберите интересующий вас вопрос:', {
-		reply_markup: keyboard,
-	});
-}
-
-// Обработчик выбора части
-bot.callbackQuery('select_unit', async (ctx) => {
+async function showUnitSelection(ctx) {
 	const keyboard = new InlineKeyboard()
 		.text('упр. 3 мсд', 'unit_3msd')
 		.row()
@@ -91,21 +78,17 @@ bot.callbackQuery('select_unit', async (ctx) => {
 		'Выберите войсковую часть, в которой проходит службу военнослужащего:',
 		{ reply_markup: keyboard }
 	);
+}
 
-	try {
-		await ctx.answerCallbackQuery();
-	} catch (error) {
-		console.warn('Не удалось выполнить answerCallbackQuery:', error.message);
-	}
-});
-// Обработчики выбора части
 const units = ['3msd', '245msp', '252msp', '752msp', '237tp', 'other'];
 units.forEach((unit) => {
 	bot.callbackQuery(`unit_${unit}`, async (ctx) => {
-		userState[ctx.from.id] = {
-			unit: unit,
-			step: 'ask_soldier_fio',
-		};
+		const userId = ctx.from.id;
+		if (!userState[userId]) userState[userId] = {};
+
+		userState[userId].unit = unit;
+		userState[userId].step = 'ask_soldier_fio';
+
 		await safeReply(ctx, 'Введите ФИО военнослужащего:');
 		await ctx.answerCallbackQuery();
 	});
@@ -117,17 +100,37 @@ bot.on('message:text', async (ctx) => {
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
 
+	if (ctx.chat.type !== 'private') return;
+
 	if (ctx.message.text.startsWith('/')) {
 		await safeReply(
 			ctx,
 			'Здравствуйте, вы обратились на горячую линию 3 мотострелковой дивизии 20 гвардейской общевойсковой армии Московского военного округа!'
 		);
-		await askQuestion(ctx);
+
+		userState[userId] = { step: 'ask_question' };
+
+		await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
+		return;
 	}
+
 	if (!state) return;
 
 	try {
 		switch (state.step) {
+			case 'ask_question':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'Вопрос должен содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.question = ctx.message.text;
+				state.step = 'select_unit';
+				await showUnitSelection(ctx);
+				break;
+
 			case 'ask_soldier_fio':
 				if (ctx.message.text.length < 5) {
 					await safeReply(
@@ -201,6 +204,7 @@ bot.on('message:text', async (ctx) => {
 
 				const message =
 					`📌 Новый запрос\n\n` +
+					`Вопрос: ${state.question}\n\n` +
 					`Войсковая часть: ${state.unit}\n\n` +
 					`Данные военнослужащего:\n` +
 					`ФИО: ${state.soldierFio}\n` +
