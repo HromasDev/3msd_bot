@@ -1,4 +1,4 @@
-cconst { Bot, InlineKeyboard } = require('grammy');
+const { Bot, InlineKeyboard } = require('grammy');
 require('dotenv').config();
 
 // Проверка переменных окружения
@@ -107,16 +107,23 @@ bot.start(async (ctx) => {
 		);
 
 });
-
-bot.command('statusvsl',async (ctx) => {	
+bot.on('message:text', async (ctx) => {	
 	const userId = ctx.from.id;
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
+	if (ctx.message.text.startsWith('/')) {
+		bot.command('statusvsl',async (ctx) => {	
+			await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');	
+			return;
+		});
+		bot.command('1110',async (ctx) => {})
+		bot.command('rekvisites',async (ctx) => {})
+		bot.command('abonent',async (ctx) => {})
+
+
+	}
 
 	if (ctx.chat.type !== 'private') return;
-		await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
-		
-
 	if (!state) return;
 
 	try {
@@ -233,10 +240,7 @@ bot.command('statusvsl',async (ctx) => {
 		console.error('Ошибка в обработчике сообщений:', error);
 		delete userState[userId];
 	}
-})
-bot.command('1110',async (ctx) => {})
-bot.command('rekvisites',async (ctx) => {})
-bot.command('abonent',async (ctx) => {})
+});
 
 // Обработчик ошибок
 bot.catch((err) => {
@@ -248,3 +252,4 @@ bot
 	.start()
 	.then(() => console.log('Бот успешно запущен!'))
 	.catch((err) => console.error('Ошибка при запуске бота:', err));
+
