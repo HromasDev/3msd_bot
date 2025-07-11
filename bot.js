@@ -1,4 +1,4 @@
-const { Bot, InlineKeyboard } = require('grammy');
+cconst { Bot, InlineKeyboard } = require('grammy');
 require('dotenv').config();
 
 // Проверка переменных окружения
@@ -112,14 +112,12 @@ bot.command('statusvsl',async (ctx) => {
 	const userId = ctx.from.id;
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	await safeReply(
-		ctx,
-		'Пожалуйста, введите ваш вопрос:'
-	);
-		
+
 	if (ctx.chat.type !== 'private') return;
-	userState[userId] = { step: 'ask_question' };
-	
+		await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
+		
+
+	if (!state) return;
 
 	try {
 		switch (state.step) {
@@ -208,7 +206,7 @@ bot.command('statusvsl',async (ctx) => {
 				state.requesterPhone = ctx.message.text;
 
 				const message =
-					`📌 Новый запрос - связь с оператором горячей линии` +
+					`📌 Новый запрос\n\n` +
 					`Вопрос: ${state.question}\n\n` +
 					`Войсковая часть: ${state.unit}\n\n` +
 					`Данные военнослужащего:\n` +
@@ -235,7 +233,6 @@ bot.command('statusvsl',async (ctx) => {
 		console.error('Ошибка в обработчике сообщений:', error);
 		delete userState[userId];
 	}
-	
 })
 bot.command('1110',async (ctx) => {})
 bot.command('rekvisites',async (ctx) => {})
