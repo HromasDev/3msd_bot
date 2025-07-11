@@ -112,15 +112,21 @@ bot.on('message:text', async (ctx) => {
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
 	if (ctx.message.text.startsWith('/')) {
-		bot.command('statusvsl',async (ctx) => {	
-			await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');	
-			return;
-		});
-		bot.command('1110',async (ctx) => {})
-		bot.command('rekvisites',async (ctx) => {})
-		bot.command('abonent',async (ctx) => {})
-
-
+		switch(ctx.message.text){
+			case '/statusvsl':
+				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
+				break;
+			case '/1110':
+				await safeReply(ctx, 'В разработке.');	
+				break;
+			case '/rekvisites':
+				await safeReply(ctx, 'В разработке.');	
+				break;
+			case '/abonent':
+				await safeReply(ctx, 'В разработке.');	
+				break;
+		}
+		return;
 	}
 
 	if (ctx.chat.type !== 'private') return;
@@ -252,4 +258,3 @@ bot
 	.start()
 	.then(() => console.log('Бот успешно запущен!'))
 	.catch((err) => console.error('Ошибка при запуске бота:', err));
-
