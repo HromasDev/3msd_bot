@@ -75,7 +75,7 @@ async function showUnitSelection(ctx) {
 
 	await safeReply(
 		ctx,
-		'Выберите войсковую часть, в которой проходит службу военнослужащего:',
+		'Выберите войсковую часть, в которой проходит служба военнослужащего:',
 		{ reply_markup: keyboard }
 	);
 }
@@ -107,34 +107,31 @@ bot.start(async (ctx) => {
 		);
 
 });
-bot.on('message:text', async (ctx) => {	
+bot.command('statusvsl', async (ctx) => {
 	const userId = ctx.from.id;
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	if (ctx.message.text.startsWith('/')) {
-		switch(ctx.message.text){
-			case '/statusvsl':
-				userState[userId] = { step: 'ask_question' };
-				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
-				break;
-			case '/1110':
-				await safeReply(ctx, 'В разработке.');	
-				break;
-			case '/rekvisites':
-				await safeReply(ctx, 'В разработке.');	
-				break;
-			case '/abonent':
-				await safeReply(ctx, 'В разработке.');	
-				break;
-		}
-		return;
-	}
-
+	await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
+	bot.on('message:text', async (ctx) => {
+		bot.on('message:text', async (ctx) => {
 	if (ctx.chat.type !== 'private') return;
 	if (!state) return;
 
 	try {
 		switch (state.step) {
+			case 'ask_free_question':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'Вопрос должен содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+
+					return;
+				}					
+				state.question = ctx.message.text;
+				state.step = 'select_unit';
+				await showUnitSelection(ctx);
+				break;
 			case 'ask_question':
 				if (ctx.message.text.length < 5) {
 					await safeReply(
@@ -220,7 +217,7 @@ bot.on('message:text', async (ctx) => {
 				state.requesterPhone = ctx.message.text;
 
 				const message =
-					`📌 Новый запрос\n\n` +
+					`📌 Новый запрос - статус военнослужащего.\n\n` +
 					`Вопрос: ${state.question}\n\n` +
 					`Войсковая часть: ${state.unit}\n\n` +
 					`Данные военнослужащего:\n` +
@@ -247,7 +244,39 @@ bot.on('message:text', async (ctx) => {
 		console.error('Ошибка в обработчике сообщений:', error);
 		delete userState[userId];
 	}
+	});
+	});
+		
 });
+bot.command('1110', async (ctx) => {
+	const userId = ctx.from.id;
+	const state = userState[userId];
+	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
+	await safeReply(ctx, 'Разработка 1110.');
+	
+		
+});
+bot.command('rekvisites', async (ctx) => {
+	const userId = ctx.from.id;
+	const state = userState[userId];
+	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
+	await safeReply(ctx, 'Разработка реквизиты.');
+	bot.on('message:text', async (ctx) => {
+
+	});
+		
+});
+bot.command('abonent', async (ctx) => {
+	const userId = ctx.from.id;
+	const state = userState[userId];
+	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
+	await safeReply(ctx, 'Разработка абонент.');
+	bot.on('message:text', async (ctx) => {
+
+	});
+		
+});
+
 
 // Обработчик ошибок
 bot.catch((err) => {
@@ -259,3 +288,4 @@ bot
 	.start()
 	.then(() => console.log('Бот успешно запущен!'))
 	.catch((err) => console.error('Ошибка при запуске бота:', err));
+
