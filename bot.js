@@ -114,6 +114,7 @@ bot.on('message:text', async (ctx) => {
 	if (ctx.message.text.startsWith('/')) {
 		switch(ctx.message.text){
 			case '/statusvsl':
+				userState[userId] = { step: 'ask_question' };
 				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
 				break;
 			case '/1110':
