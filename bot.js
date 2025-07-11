@@ -108,12 +108,10 @@ bot.start(async (ctx) => {
 
 });
 
-bot.on('message:text',async (ctx) => {	
+bot.command('statusvsl',async (ctx) => {	
 	const userId = ctx.from.id;
 	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	if (ctx.message.text=='/statusvsl'){
-
 	await safeReply(
 		ctx,
 		'Пожалуйста, введите ваш вопрос:'
@@ -121,7 +119,7 @@ bot.on('message:text',async (ctx) => {
 		
 	if (ctx.chat.type !== 'private') return;
 	userState[userId] = { step: 'ask_question' };
-
+	
 
 	try {
 		switch (state.step) {
@@ -237,24 +235,11 @@ bot.on('message:text',async (ctx) => {
 		console.error('Ошибка в обработчике сообщений:', error);
 		delete userState[userId];
 	}
-	}
-	if (ctx.message.text=='/1110'){
-		await ctx.reply(
-			"Реквизиты находятся в разработке"
-		);
-	}
-	if (ctx.message.text=='/1110'){
-		await ctx.reply(
-			"Установоление выплат детям в разработке"
-		);
-	}
-	if (ctx.message.text=='/abonent'){
-		await ctx.reply(
-			"Список операторов горячей линии:"
-		);
-	}
+	
 })
-
+bot.command('1110',async (ctx) => {})
+bot.command('rekvisites',async (ctx) => {})
+bot.command('abonent',async (ctx) => {})
 
 // Обработчик ошибок
 bot.catch((err) => {
