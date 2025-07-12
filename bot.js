@@ -10,6 +10,8 @@ if (!process.env.TOKEN || !process.env.CHAT_ID) {
 const bot = new Bot(process.env.TOKEN);
 const userState = {};
 const GROUP_ID = process.env.CHAT_ID;
+questionsLog=''
+
 
 // Конфигурация топиков
 const TOPICS = {
@@ -75,7 +77,7 @@ async function showUnitSelection(ctx) {
 
 	await safeReply(
 		ctx,
-		'Выберите войсковую часть, в которой проходит служба военнослужащего:',
+		'Выберите войсковую часть, в которой хотите обратиться:',
 		{ reply_markup: keyboard }
 	);
 }
@@ -94,44 +96,11 @@ units.forEach((unit) => {
 	});
 });
 
-// Обработчик текстовых сообщений
-bot.start(async (ctx) => {
-		await ctx.reply(
-			"Здравствуйте, Вы обратились на горячую линию 3 мотострелковой дивизии 20 армии Московского военного округа! Тут вы можете уточнить ряд вопросов:"
-		);
-		await ctx.reply(
-			"- ✅ Заказать справку 1421 - данная справка необходима для признания безвестно отсутствующего военнослужащего умершим и оформления социальных выплат"+
-			"- ✅ Оформить ежемесячную выплату в размере МРОТ в зависимости от регионов детям безвестно отсутствующих военнослужащих, согласно Указа Президента Российской Федерации от 26.12.2024 года №1110"+
-			"- ✅ Установить банковские реквизиты родственников безвестно отсутствующих военнослужащих для выплаты ежемесячного денежного довольствия"+
-			"- ✅ Узнать статус военнослужащего или связаться с представителями горячей линии"
-		);
 
-});
-bot.command('statusvsl', async (ctx) => {
-	const userId = ctx.from.id;
-	const state = userState[userId];
-	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
-	bot.on('message:text', async (ctx) => {
-		bot.on('message:text', async (ctx) => {
-	if (ctx.chat.type !== 'private') return;
-	if (!state) return;
-
+// Обработка команды /statusvsl
+async function statusvsl(ctx,state,username,userState){
 	try {
 		switch (state.step) {
-			case 'ask_free_question':
-				if (ctx.message.text.length < 5) {
-					await safeReply(
-						ctx,
-						'Вопрос должен содержать не менее 5 символов. Пожалуйста, введите снова:'
-					);
-
-					return;
-				}					
-				state.question = ctx.message.text;
-				state.step = 'select_unit';
-				await showUnitSelection(ctx);
-				break;
 			case 'ask_question':
 				if (ctx.message.text.length < 5) {
 					await safeReply(
@@ -159,7 +128,7 @@ bot.command('statusvsl', async (ctx) => {
 					ctx,
 					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
 				);
-				break;
+			break;
 
 			case 'ask_soldier_birthdate':
 				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
@@ -217,7 +186,7 @@ bot.command('statusvsl', async (ctx) => {
 				state.requesterPhone = ctx.message.text;
 
 				const message =
-					`📌 Новый запрос - статус военнослужащего.\n\n` +
+					`📌 Новый запрос - ❔ статус военнослужащего\n\n` +
 					`Вопрос: ${state.question}\n\n` +
 					`Войсковая часть: ${state.unit}\n\n` +
 					`Данные военнослужащего:\n` +
@@ -237,46 +206,496 @@ bot.command('statusvsl', async (ctx) => {
 						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
 					);
 				}
-				delete userState[userId];
+				delete userState;
 				break;
 		}
 	} catch (error) {
 		console.error('Ошибка в обработчике сообщений:', error);
-		delete userState[userId];
+		delete userState;
 	}
-	});
-	});
+}
+
+
+// Обработка команды /rekvisites
+async function rekvisites(ctx,state,username,userState){
+	console.log(state.step);
+	try {
+		switch (state.step) {
+			case 'ask_soldier_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+			state.soldierFio = ctx.message.text;
+				state.step = 'ask_soldier_birthdate';
+				await safeReply(
+					ctx,
+					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
+				);
+			break;
+			
+			case 'ask_soldier_birthdate':
+				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
+					await safeReply(
+						ctx,
+						'Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:'
+					);
+					return;
+				}
+				state.soldierBirthdate = ctx.message.text;
+				state.step = 'ask_soldier_number';
+				await safeReply(
+					ctx,
+					'Введите личный номер военнослужащего (если не знаете, отправьте "-"):'
+				);
+				break;
+
+			case 'ask_soldier_number':
+				state.soldierNumber =
+					ctx.message.text === '-' ? 'не указан' : ctx.message.text;
+				state.step = 'ask_requester_relation';
+				await safeReply(
+					ctx,
+					'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
+				);
+			break;
+			case 'ask_requester_relation':
+				state.requesterRelation = ctx.message.text;
+				state.step = 'ask_requester_fio';
+				await safeReply(ctx, 'Введите ваше ФИО:');
+				break;
+
+			case 'ask_requester_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterFio = ctx.message.text;
+				state.step = 'ask_requester_phone';
+				await safeReply(ctx, 'Введите ваш контактный номер телефона:');
+				break;
+			case 'ask_requester_phone':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'Номер телефона слишком короткий. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterPhone = ctx.message.text;
+				await safeReply(
+						ctx,
+						'Укажите примечание к обращению по банковским реквезитам.\n'+
+						'Если вы не хотите направлять дополнительное сообщение, проставьте "-".'
+				);
+				state.step = 'send_massage';
+			break;
+			case 'send_massage' :
+				message =''
+				state.descriptionMassage = ctx.message.text;
+				if(state.descriptionMassage=='-'){
+					message =
+					`📌 Новый запрос - 💳 банковские реквизиты\n\n` +
+					`Войсковая часть: ${state.unit}\n\n` +
+					`Данные военнослужащего:\n` +
+					`ФИО: ${state.soldierFio}\n` +
+					`Дата рождения: ${state.soldierBirthdate}\n` +
+					`Личный номер: ${state.soldierNumber}\n\n` +
+					`Данные заявителя:\n` +
+					`Кем приходится: ${state.requesterRelation}\n` +
+					`ФИО: ${state.requesterFio}\n` +
+					`Телефон: ${state.requesterPhone}\n` +
+					`Контакт: ${username}`;
+				}else{
+					message =
+					`📌 Новый запрос - 💳 банковские реквизиты\n\n` +
+					`Войсковая часть: ${state.unit}\n\n` +
+					`Данные военнослужащего:\n` +
+					`ФИО: ${state.soldierFio}\n` +
+					`Дата рождения: ${state.soldierBirthdate}\n` +
+					`Личный номер: ${state.soldierNumber}\n\n` +
+					`Данные заявителя:\n` +
+					`Кем приходится: ${state.requesterRelation}\n` +
+					`ФИО: ${state.requesterFio}\n` +
+					`Телефон: ${state.requesterPhone}\n` +
+					`Дополнение к обращению: ${state.descriptionMassage}\n` +
+					`Контакт: ${username}`;
+				}
+				const success = await sendToGroup(ctx, message, state.unit);
+				if (success) {
+					await safeReply(
+						ctx,
+						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
+					);
+				}
+				delete userState;
+				break;
+		}
+	} catch (error) {
+		console.error('Ошибка в обработчике сообщений:', error);
+		delete userState;
+	}
+
+}
+// Обработка команды /1110
+async function child1110(ctx,state,username,userState){
+	console.log(state.step);
+	try {
+		switch (state.step) {
+			case 'ask_soldier_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.soldierFio = ctx.message.text;
+				state.step = 'ask_soldier_birthdate';
+				await safeReply(
+					ctx,
+					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
+				);
+			break;
+			
+			case 'ask_soldier_birthdate':
+				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
+					await safeReply(
+						ctx,
+						'Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:'
+					);
+					return;
+				}
+				state.soldierBirthdate = ctx.message.text;
+				state.step = 'ask_soldier_number';
+				await safeReply(
+					ctx,
+					'Введите личный номер военнослужащего (если не знаете, отправьте "-"):'
+				);
+				break;
+
+			case 'ask_soldier_number':
+				state.soldierNumber =
+					ctx.message.text === '-' ? 'не указан' : ctx.message.text;
+				state.step = 'ask_requester_relation';
+				await safeReply(
+					ctx,
+					'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
+				);
+			break;
+			case 'ask_requester_relation':
+				state.requesterRelation = ctx.message.text;
+				state.step = 'ask_requester_fio';
+				await safeReply(ctx, 'Введите ваше ФИО:');
+				break;
+
+			case 'ask_requester_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterFio = ctx.message.text;
+				state.step = 'ask_requester_phone';
+				await safeReply(ctx, 'Введите ваш контактный номер телефона:');
+				break;
+			case 'ask_requester_phone':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'Номер телефона слишком короткий. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterPhone = ctx.message.text;
+				await safeReply(
+						ctx,
+						'Перечислите ФИО ваших детей/ребенка (через запятую), что не получают выплаты.'
 		
+				);
+				state.step = 'child_fullname';
+			break;
+
+			case 'child_fullname':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО слишком короткое. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.childFullname = ctx.message.text;
+				await safeReply(
+						ctx,
+						'Перечислите дату рождения вашего ребенка/детей (через запятую), что не получают выплаты.'
+				);
+				state.step = 'child_birthday';
+			break;
+			case 'child_birthday':
+				state.childBirthday = ctx.message.text;
+				await safeReply(
+						ctx,
+						'Укажите примечание к обращению по банковским реквезитам.\n'+
+						'Если вы не хотите направлять дополнительное сообщение, проставьте "-".'
+				);
+				state.step = 'send_massage';
+			break;
+			
+			case 'send_massage' :
+				message =''
+				state.descriptionMassage = ctx.message.text;
+				if(state.descriptionMassage=='-'){
+					message =
+					`📌 Новый запрос - 📝 выплаты на детей военнослужащих\n\n` +
+					`Войсковая часть: ${state.unit}\n\n` +
+					`Данные военнослужащего:\n` +
+					`ФИО: ${state.soldierFio}\n` +
+					`Дата рождения: ${state.soldierBirthdate}\n` +
+					`Личный номер: ${state.soldierNumber}\n\n` +
+					`Данные заявителя:\n` +
+					`Кем приходится: ${state.requesterRelation}\n` +
+					`ФИО: ${state.requesterFio}\n` +
+					`Телефон: ${state.requesterPhone}\n\n` +
+					`Данные по ребенку/детям:\n` +
+					`ФИО(Ребенка/детей): ${state.childFullname}\n` +
+					`Дата рождения(Ребенка/детей): ${state.childBirthday}\n\n` +
+					`Справочная информация:\n` +
+					`Контакт: ${username}`;
+				}else{
+					message =
+					`📌 Новый запрос - 📝 выплаты на детей военнослужащих\n\n` +
+					`Войсковая часть: ${state.unit}\n\n` +
+					`Данные военнослужащего:\n` +
+					`ФИО: ${state.soldierFio}\n` +
+					`Дата рождения: ${state.soldierBirthdate}\n` +
+					`Личный номер: ${state.soldierNumber}\n\n` +
+					`Данные заявителя:\n` +
+					`Кем приходится: ${state.requesterRelation}\n` +
+					`ФИО: ${state.requesterFio}\n` +
+					`Телефон: ${state.requesterPhone}\n\n` +
+					`Данные по ребенку/детям:\n` +
+					`ФИО(Ребенка/детей): ${state.childFullname}\n` +
+					`Дата рождения(Ребенка/детей): ${state.childBirthday}\n\n` +
+					`Справочная информация:\n` +
+					`Дополнение к обращению: ${state.descriptionMassage}\n` +
+					`Контакт: ${username}`;
+				}
+				const success = await sendToGroup(ctx, message, state.unit);
+				if (success) {
+					await safeReply(
+						ctx,
+						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
+					);
+				}
+				delete userState;
+				break;
+		}
+	} catch (error) {
+		console.error('Ошибка в обработчике сообщений:', error);
+		delete userState;
+	}
+}
+// Обработка команды /abonent
+async function abonent(ctx,state,username,userState){
+	try {
+		switch (state.step) {
+			case 'ask_question':
+				if (ctx.message.text.length < 10) {
+					await safeReply(
+						ctx,
+						'Обращение должно содержать не менее 10 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.question = ctx.message.text;
+				state.step = 'select_unit';
+				await showUnitSelection(ctx);
+				break;
+
+			case 'ask_soldier_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.soldierFio = ctx.message.text;
+				state.step = 'ask_soldier_birthdate';
+				await safeReply(
+					ctx,
+					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
+				);
+			break;
+
+			case 'ask_soldier_birthdate':
+				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
+					await safeReply(
+						ctx,
+						'Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:'
+					);
+					return;
+				}
+				state.soldierBirthdate = ctx.message.text;
+				state.step = 'ask_soldier_number';
+				await safeReply(
+					ctx,
+					'Введите личный номер военнослужащего (если не знаете, отправьте "-"):'
+				);
+				break;
+
+			case 'ask_soldier_number':
+				state.soldierNumber =
+					ctx.message.text === '-' ? 'не указан' : ctx.message.text;
+				state.step = 'ask_requester_relation';
+				await safeReply(
+					ctx,
+					'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
+				);
+				break;
+
+			case 'ask_requester_relation':
+				state.requesterRelation = ctx.message.text;
+				state.step = 'ask_requester_fio';
+				await safeReply(ctx, 'Введите ваше ФИО:');
+				break;
+
+			case 'ask_requester_fio':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'ФИО должно содержать не менее 5 символов. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterFio = ctx.message.text;
+				state.step = 'ask_requester_phone';
+				await safeReply(ctx, 'Введите ваш контактный номер телефона:');
+				break;
+
+			case 'ask_requester_phone':
+				if (ctx.message.text.length < 5) {
+					await safeReply(
+						ctx,
+						'Номер телефона слишком короткий. Пожалуйста, введите снова:'
+					);
+					return;
+				}
+				state.requesterPhone = ctx.message.text;
+
+				const message =
+					`📌 Новый запрос - ☎️ связь с оператором\n\n` +
+					`Обращение: ${state.question}\n\n` +
+					`Войсковая часть: ${state.unit}\n\n` +
+					`Данные военнослужащего:\n` +
+					`ФИО: ${state.soldierFio}\n` +
+					`Дата рождения: ${state.soldierBirthdate}\n` +
+					`Личный номер: ${state.soldierNumber}\n\n` +
+					`Данные заявителя:\n` +
+					`Кем приходится: ${state.requesterRelation}\n` +
+					`ФИО: ${state.requesterFio}\n` +
+					`Телефон: ${state.requesterPhone}\n` +
+					`Контакт: ${username}`;
+
+				const success = await sendToGroup(ctx, message, state.unit);
+				if (success) {
+					await safeReply(
+						ctx,
+						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
+					);
+				}
+				delete userState;
+				break;
+		}
+	} catch (error) {
+		console.error('Ошибка в обработчике сообщений:', error);
+		delete userState;
+	}
+}
+
+bot.start(async (ctx) => {
+		await ctx.reply(
+			"Здравствуйте, Вы обратились на горячую линию 3 мотострелковой дивизии 20 армии Московского военного округа! Тут вы можете уточнить ряд вопросов:"
+		);
+		await ctx.reply(
+			"- ✅ Заказать справку 1421 - данная справка необходима для признания безвестно отсутствующего военнослужащего умершим и оформления социальных выплат"+
+			"- ✅ Оформить ежемесячную выплату в размере МРОТ в зависимости от регионов детям безвестно отсутствующих военнослужащих, согласно Указа Президента Российской Федерации от 26.12.2024 года №1110"+
+			"- ✅ Установить банковские реквизиты родственников безвестно отсутствующих военнослужащих для выплаты ежемесячного денежного довольствия"+
+			"- ✅ Узнать статус военнослужащего или связаться с представителями горячей линии"
+		);
+
 });
-bot.command('1110', async (ctx) => {
+// Обработка команд из сообщений и подтягивание к ним функций
+bot.on('message:text', async (ctx) => {
 	const userId = ctx.from.id;
-	const state = userState[userId];
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	await safeReply(ctx, 'Разработка 1110.');
 	
-		
-});
-bot.command('rekvisites', async (ctx) => {
-	const userId = ctx.from.id;
-	const state = userState[userId];
-	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	await safeReply(ctx, 'Разработка реквизиты.');
-	bot.on('message:text', async (ctx) => {
+	if (ctx.chat.type !== 'private') return;
 
-	});
+	
+	questionsLog=!questionsLog || ctx.message.text.startsWith('/')? ctx.message.text:questionsLog;
+	console.log(questionsLog);
+	switch(questionsLog){
+		case '/statusvsl':
+			if(ctx.message.text.startsWith('/')){
+				userState[userId] = { step: 'ask_question' };
+				state = userState[userId];
+				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');	
+				if (!state) return;	
+			}else {
+				if (!state) return;	
+				statusvsl(ctx,state,username,userState[userId]);
+			}
+		break;
+		case '/rekvisites':
+			if(ctx.message.text.startsWith('/')){
+				userState[userId] = { step: 'select_unit' };
+				state = userState[userId];
+				console.log(questionsLog);
+				if (!state) return;	
+				await showUnitSelection(ctx);
+			}else{
+				if (!state) return;	
+				console.log(state.step);
+				rekvisites(ctx,state,username,userState[userId]);
+			}	
+		break;
+		case '/1110':
+			if(ctx.message.text.startsWith('/')){
+				userState[userId] = { step: 'select_unit' };
+				state = userState[userId];
+				console.log(questionsLog);
+				if (!state) return;	
+				await showUnitSelection(ctx);
+			}else{
+				if (!state) return;	
+				console.log(state.step);
+				child1110(ctx,state,username,userState[userId]);
+			}
+		break;
+		case '/abonent':
+			if(ctx.message.text.startsWith('/')){
+				userState[userId] = { step: 'ask_question' };
+				state = userState[userId];
+				await safeReply(ctx, 'Пожалуйста, введите ваш е обращение к оператору:');	
+				if (!state) return;	
+			}else {
+				if (!state) return;	
+				abonent(ctx,state,username,userState[userId]);
+			}
+		break;
 		
+	}
+	return;
 });
-bot.command('abonent', async (ctx) => {
-	const userId = ctx.from.id;
-	const state = userState[userId];
-	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	await safeReply(ctx, 'Разработка абонент.');
-	bot.on('message:text', async (ctx) => {
-
-	});
-		
-});
-
 
 // Обработчик ошибок
 bot.catch((err) => {
