@@ -10,7 +10,6 @@ if (!process.env.TOKEN || !process.env.CHAT_ID) {
 const bot = new Bot(process.env.TOKEN);
 const userState = {};
 const GROUP_ID = process.env.CHAT_ID;
-let questionsLog = '';
 
 const SESSION_TIMEOUT = 1000 * 60 * 60; // 1 час
 
@@ -107,6 +106,8 @@ menuCommands.forEach((menuCommand) => {
 		if (!userState[userId]) userState[userId] = { lastActivity: Date.now() };
 		else userState[userId].lastActivity = Date.now();
 
+		userState[userId].command = menuCommand;
+
 		if (ctx.chat.type !== 'private') return;
 		switch(menuCommand){
 			case '/statusvsl':
@@ -114,24 +115,21 @@ menuCommands.forEach((menuCommand) => {
 				state = userState[userId];
 				if (!state) return;
 				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
-				questionsLog='/statusvsl'
 			break;
 			case '/rekvisites':
 				userState[userId].step = 'select_unit';
 				state = userState[userId];
-				console.log(questionsLog);
+				console.log(userState[userId].command);
 				if (!state) return;
 				await showUnitSelection(ctx);
-				questionsLog='/rekvisites'
 				rekvisites(ctx,state,username);
 			break;
 			case '/1110':
 				userState[userId].step = 'select_unit';
 				state = userState[userId];
-				console.log(questionsLog);
+				console.log(userState[userId].command);
 				if (!state) return;
 				await showUnitSelection(ctx);
-				questionsLog='/1110'
 				child1110(ctx,state,username);
 			break;
 			case '/abonent':
@@ -139,15 +137,13 @@ menuCommands.forEach((menuCommand) => {
 				state = userState[userId];
 				if (!state) return;
 				await safeReply(ctx, 'Пожалуйста, введите ваше обращение к оператору:');
-				questionsLog='/abonent'
 			break;
 			case '/sp1421':
-				console.log(questionsLog);
+				console.log(userState[userId].command);
 				userState[userId].step = 'select_unit';
 				state = userState[userId];
 				if (!state) return;
 				await showUnitSelection(ctx);
-				questionsLog='/sp1421'
 				sp1421(ctx,state,username);
 
 			break;
@@ -493,7 +489,7 @@ async function child1110(ctx,state,username){
 					ctx,
 					'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
 				);
-			break;
+				break;
 			case 'ask_requester_relation':
 				state.requesterRelation = ctx.message.text;
 				state.step = 'ask_requester_fio';
@@ -775,7 +771,7 @@ async function sp1421(ctx,state,username){
 					ctx,
 					'Укажите, кем вы являетесь военнослужащему (родственная связь или должность):'
 				);
-			break;
+				break;
 			case 'ask_requester_relation':
 				state.requesterRelation = ctx.message.text;
 				state.step = 'ask_requester_fio';
@@ -870,21 +866,23 @@ bot.on('message:text', async (ctx) => {
 
 	if (ctx.chat.type !== 'private') return;
 
-
-	questionsLog=!questionsLog || ctx.message.text.startsWith('/')? ctx.message.text:questionsLog;
-
 	if (!userState[userId]) userState[userId] = { lastActivity: Date.now() };
+    const state = userState[userId];
 
-	switch(questionsLog){
+	if (ctx.message.text.startsWith('/')) {
+        state.command = ctx.message.text;
+    }
+
+	switch(state.command){
 		// вызов запроса на реквизиты с помощью команды /statusvsl
 		case '/statusvsl':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'ask_question', lastActivity: Date.now() };
-				state = userState[userId];
+				userState[userId] = { step: 'ask_question', lastActivity: Date.now(), command: '/statusvsl' };
+				// state = userState[userId];
 				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
 				if (!state) return;
 			}else {
-				state = userState[userId];
+				// state = userState[userId];
 				if (!state) return;
 				statusvsl(ctx,state,username);
 			}
@@ -892,13 +890,13 @@ bot.on('message:text', async (ctx) => {
 		// вызов запроса на реквизиты с помощью команды /rekvisites
 		case '/rekvisites':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
-				state = userState[userId];
-				console.log(questionsLog);
+				userState[userId] = { step: 'select_unit', lastActivity: Date.now(), command: '/rekvisites' };
+				// state = userState[userId];
+				console.log(state.command);
 				if (!state) return;
 				await showUnitSelection(ctx);
 			}else{
-				state = userState[userId];
+				// state = userState[userId];
 				if (!state) return;
 				console.log(state.step);
 				rekvisites(ctx,state,username);
@@ -907,13 +905,13 @@ bot.on('message:text', async (ctx) => {
 		// вызов запроса по выплатам детям военнослужащих с помощью команды /1110
 		case '/1110':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
-				state = userState[userId];
-				console.log(questionsLog);
+				userState[userId] = { step: 'select_unit', lastActivity: Date.now(), command: '/1110' };
+				// state = userState[userId];
+				console.log(state.command);
 				if (!state) return;
 				await showUnitSelection(ctx);
 			}else{
-				state = userState[userId];
+				// state = userState[userId];
 				if (!state) return;
 				console.log(state.step);
 				child1110(ctx,state,username);
@@ -922,12 +920,12 @@ bot.on('message:text', async (ctx) => {
 		// вызов обращение к оператору с помощью команды /abonent
 		case '/abonent':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'ask_question', lastActivity: Date.now() };
-				state = userState[userId];
+				userState[userId] = { step: 'ask_question', lastActivity: Date.now(), command: '/abonent' };
+				// state = userState[userId];
 				await safeReply(ctx, 'Пожалуйста, введите ваше обращение к оператору:');
 				if (!state) return;
 			}else {
-				state = userState[userId];
+				// state = userState[userId];
 				if (!state) return;
 				abonent(ctx,state,username);
 			}
@@ -935,13 +933,13 @@ bot.on('message:text', async (ctx) => {
 		// вызов обращение к оператору с помощью команды /sp1421
 		case '/sp1421':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
-				state = userState[userId];
-				console.log(questionsLog);
+				userState[userId] = { step: 'select_unit', lastActivity: Date.now(), command: '/sp1421' };
+				// state = userState[userId];
+				console.log(state.command);
 				if (!state) return;
 				await showUnitSelection(ctx);
 			}else{
-				state = userState[userId];
+				// state = userState[userId];
 				if (!state) return;
 				console.log(state.step);
 				sp1421(ctx,state,username);
@@ -959,8 +957,8 @@ bot.on('message:text', async (ctx) => {
 			"- ✅ Узнать статус военнослужащего или связаться с представителями горячей линии\n"
 		);
 		userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
-		state = userState[userId];
-		if (!state) return;
+		// state = userState[userId];
+		if (!userState[userId]) return;
 		await showMenuSelection(ctx);
 		break;
 	}
