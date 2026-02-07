@@ -10,7 +10,24 @@ if (!process.env.TOKEN || !process.env.CHAT_ID) {
 const bot = new Bot(process.env.TOKEN);
 const userState = {};
 const GROUP_ID = process.env.CHAT_ID;
-questionsLog=''
+let questionsLog = '';
+
+const SESSION_TIMEOUT = 1000 * 60 * 60; // 1 час
+
+setInterval(() => {
+	const now = Date.now();
+	let cleanedCount = 0;
+
+	for (const userId in userState) {
+		if (userState[userId].lastActivity && (now - userState[userId].lastActivity > SESSION_TIMEOUT)) {
+			delete userState[userId];
+			cleanedCount++;
+		}
+	}
+	if (cleanedCount > 0) {
+		console.log(`🧹 GC: Очищено ${cleanedCount} зависших сессий. Текущая память: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
+	}
+}, 1000 * 60 * 30);
 
 
 // Конфигурация топиков
@@ -87,51 +104,53 @@ menuCommands.forEach((menuCommand) => {
 		const userId = ctx.from.id;
 		const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
 
-		if (!userState[userId]) userState[userId] = {};		
+		if (!userState[userId]) userState[userId] = { lastActivity: Date.now() };
+		else userState[userId].lastActivity = Date.now();
+
 		if (ctx.chat.type !== 'private') return;
 		switch(menuCommand){
 			case '/statusvsl':
-				userState[userId] = { step: 'ask_question' };
+				userState[userId].step = 'ask_question';
 				state = userState[userId];
-				if (!state) return;	
-				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');	
+				if (!state) return;
+				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
 				questionsLog='/statusvsl'
 			break;
 			case '/rekvisites':
-				userState[userId] = { step: 'select_unit' };
+				userState[userId].step = 'select_unit';
 				state = userState[userId];
 				console.log(questionsLog);
-				if (!state) return;	
+				if (!state) return;
 				await showUnitSelection(ctx);
 				questionsLog='/rekvisites'
-				rekvisites(ctx,state,username,userState[userId]);
+				rekvisites(ctx,state,username);
 			break;
 			case '/1110':
-				userState[userId] = { step: 'select_unit' };
+				userState[userId].step = 'select_unit';
 				state = userState[userId];
 				console.log(questionsLog);
-				if (!state) return;	
+				if (!state) return;
 				await showUnitSelection(ctx);
 				questionsLog='/1110'
-				child1110(ctx,state,username,userState[userId]);
+				child1110(ctx,state,username);
 			break;
 			case '/abonent':
-				userState[userId] = { step: 'ask_question' };
+				userState[userId].step = 'ask_question';
 				state = userState[userId];
-				if (!state) return;	
-				await safeReply(ctx, 'Пожалуйста, введите ваше обращение к оператору:');	
+				if (!state) return;
+				await safeReply(ctx, 'Пожалуйста, введите ваше обращение к оператору:');
 				questionsLog='/abonent'
 			break;
 			case '/sp1421':
 				console.log(questionsLog);
-				userState[userId] = { step: 'select_unit' };
+				userState[userId].step = 'select_unit';
 				state = userState[userId];
-				if (!state) return;	
+				if (!state) return;
 				await showUnitSelection(ctx);
 				questionsLog='/sp1421'
-				sp1421(ctx,state,username,userState[userId]);
-				
-			break;	
+				sp1421(ctx,state,username);
+
+			break;
 		}
 
 	});
@@ -164,8 +183,9 @@ const units = ['3msd', '245msp', '252msp', '752msp', '237tp', 'other'];
 units.forEach((unit) => {
 	bot.callbackQuery(`unit_${unit}`, async (ctx) => {
 		const userId = ctx.from.id;
-		if (!userState[userId]) userState[userId] = {};
+		if (!userState[userId]) userState[userId] = { lastActivity: Date.now() };
 
+		userState[userId].lastActivity = Date.now();
 		userState[userId].unit = unit;
 		userState[userId].step = 'ask_soldier_fio';
 
@@ -176,7 +196,9 @@ units.forEach((unit) => {
 
 
 // Обработка команды /statusvsl
-async function statusvsl(ctx,state,username,userState){
+async function statusvsl(ctx,state,username){
+	state.lastActivity = Date.now();
+
 	try {
 		switch (state.step) {
 			case 'ask_question':
@@ -283,21 +305,22 @@ async function statusvsl(ctx,state,username,userState){
 						ctx,
 						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
 					);
-					
+
 				}
-				delete userState;
+				delete userState[ctx.from.id];
 				showMenuSelection(ctx);
 				break;
 		}
 	} catch (error) {
 		console.error('Ошибка в обработчике сообщений:', error);
-		delete userState;
+		delete userState[ctx.from.id];
 	}
 }
 
 
 // Обработка команды /rekvisites
-async function rekvisites(ctx,state,username,userState){
+async function rekvisites(ctx,state,username){
+	state.lastActivity = Date.now();
 	console.log(state.step);
 	try {
 		switch (state.step) {
@@ -316,7 +339,7 @@ async function rekvisites(ctx,state,username,userState){
 					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
 				);
 			break;
-			
+
 			case 'ask_soldier_birthdate':
 				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
 					await safeReply(
@@ -414,18 +437,19 @@ async function rekvisites(ctx,state,username,userState){
 						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
 					);
 				}
-				delete userState;
+				delete userState[ctx.from.id];
 				showMenuSelection(ctx);
 				break;
 		}
 	} catch (error) {
 		console.error('Ошибка в обработчике сообщений:', error);
-		delete userState;
+		delete userState[ctx.from.id];
 	}
 
 }
 // Обработка команды /1110
-async function child1110(ctx,state,username,userState){
+async function child1110(ctx,state,username){
+	state.lastActivity = Date.now();
 	console.log(state.step);
 	try {
 		switch (state.step) {
@@ -444,7 +468,7 @@ async function child1110(ctx,state,username,userState){
 					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
 				);
 			break;
-			
+
 			case 'ask_soldier_birthdate':
 				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
 					await safeReply(
@@ -500,7 +524,7 @@ async function child1110(ctx,state,username,userState){
 				await safeReply(
 						ctx,
 						'Перечислите ФИО ваших детей/ребенка (через запятую), что не получают выплаты.'
-		
+
 				);
 				state.step = 'child_fullname';
 			break;
@@ -529,7 +553,7 @@ async function child1110(ctx,state,username,userState){
 				);
 				state.step = 'send_massage';
 			break;
-			
+
 			case 'send_massage' :
 				message =''
 				state.descriptionMassage = ctx.message.text;
@@ -576,17 +600,18 @@ async function child1110(ctx,state,username,userState){
 						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
 					);
 				}
-				delete userState;
+				delete userState[ctx.from.id];
 				showMenuSelection(ctx);
 				break;
 		}
 	} catch (error) {
 		console.error('Ошибка в обработчике сообщений:', error);
-		delete userState;
+		delete userState[ctx.from.id];
 	}
 }
 // Обработка команды /abonent
-async function abonent(ctx,state,username,userState){
+async function abonent(ctx,state,username){
+	state.lastActivity = Date.now();
 	try {
 		switch (state.step) {
 			case 'ask_question':
@@ -694,18 +719,19 @@ async function abonent(ctx,state,username,userState){
 						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
 					);
 				}
-				delete userState;
+				delete userState[ctx.from.id];
 				showMenuSelection(ctx);
 				break;
 		}
 	} catch (error) {
 		console.error('Ошибка в обработчике сообщений:', error);
-		delete userState;
+		delete userState[ctx.from.id];
 	}
 }
 
 // Обработка команды /sp1421
-async function sp1421(ctx,state,username,userState){
+async function sp1421(ctx,state,username){
+	state.lastActivity = Date.now();
 	console.log(state.step);
 	try {
 		switch (state.step) {
@@ -724,7 +750,7 @@ async function sp1421(ctx,state,username,userState){
 					'Введите дату рождения военнослужащего (в формате ДД.ММ.ГГГГ):'
 				);
 			break;
-			
+
 			case 'ask_soldier_birthdate':
 				if (!/^\d{2}\.\d{2}\.\d{4}$/.test(ctx.message.text)) {
 					await safeReply(
@@ -822,13 +848,13 @@ async function sp1421(ctx,state,username,userState){
 						'✅ Ваш запрос принят. Оператор свяжется с вами в ближайшее время.'
 					);
 				}
-				delete userState;
+				delete userState[ctx.from.id];
 				showMenuSelection(ctx);
 				break;
 		}
 	} catch (error) {
 		console.error('Ошибка в обработчике сообщений:', error);
-		delete userState;
+		delete userState[ctx.from.id];
 	}
 }
 
@@ -841,76 +867,84 @@ async function sp1421(ctx,state,username,userState){
 bot.on('message:text', async (ctx) => {
 	const userId = ctx.from.id;
 	const username = ctx.from.username ? `@${ctx.from.username}` : 'не указан';
-	
+
 	if (ctx.chat.type !== 'private') return;
 
-	
+
 	questionsLog=!questionsLog || ctx.message.text.startsWith('/')? ctx.message.text:questionsLog;
+
+	if (!userState[userId]) userState[userId] = { lastActivity: Date.now() };
+
 	switch(questionsLog){
 		// вызов запроса на реквизиты с помощью команды /statusvsl
 		case '/statusvsl':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'ask_question' };
+				userState[userId] = { step: 'ask_question', lastActivity: Date.now() };
 				state = userState[userId];
-				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');	
-				if (!state) return;	
+				await safeReply(ctx, 'Пожалуйста, введите ваш вопрос:');
+				if (!state) return;
 			}else {
-				if (!state) return;	
-				statusvsl(ctx,state,username,userState[userId]);
+				state = userState[userId];
+				if (!state) return;
+				statusvsl(ctx,state,username);
 			}
 		break;
 		// вызов запроса на реквизиты с помощью команды /rekvisites
 		case '/rekvisites':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'select_unit' };
+				userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
 				state = userState[userId];
 				console.log(questionsLog);
-				if (!state) return;	
+				if (!state) return;
 				await showUnitSelection(ctx);
 			}else{
-				if (!state) return;	
+				state = userState[userId];
+				if (!state) return;
 				console.log(state.step);
-				rekvisites(ctx,state,username,userState[userId]);
-			}	
+				rekvisites(ctx,state,username);
+			}
 		break;
 		// вызов запроса по выплатам детям военнослужащих с помощью команды /1110
 		case '/1110':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'select_unit' };
+				userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
 				state = userState[userId];
 				console.log(questionsLog);
-				if (!state) return;	
+				if (!state) return;
 				await showUnitSelection(ctx);
 			}else{
-				if (!state) return;	
+				state = userState[userId];
+				if (!state) return;
 				console.log(state.step);
-				child1110(ctx,state,username,userState[userId]);
+				child1110(ctx,state,username);
 			}
 		break;
 		// вызов обращение к оператору с помощью команды /abonent
 		case '/abonent':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'ask_question' };
+				userState[userId] = { step: 'ask_question', lastActivity: Date.now() };
 				state = userState[userId];
-				await safeReply(ctx, 'Пожалуйста, введите ваше обращение к оператору:');	
-				if (!state) return;	
+				await safeReply(ctx, 'Пожалуйста, введите ваше обращение к оператору:');
+				if (!state) return;
 			}else {
-				if (!state) return;	
-				abonent(ctx,state,username,userState[userId]);
+				state = userState[userId];
+				if (!state) return;
+				abonent(ctx,state,username);
 			}
 		break;
 		// вызов обращение к оператору с помощью команды /sp1421
 		case '/sp1421':
 			if(ctx.message.text.startsWith('/')){
-				userState[userId] = { step: 'select_unit' };
+				userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
 				state = userState[userId];
 				console.log(questionsLog);
-				if (!state) return;	
+				if (!state) return;
 				await showUnitSelection(ctx);
 			}else{
-				if (!state) return;	
+				state = userState[userId];
+				if (!state) return;
 				console.log(state.step);
-				sp1421(ctx,state,username,userState[userId]);
+				sp1421(ctx,state,username);
 			}
 		break;
 		// вызов обращение к оператору с помощью команды /start
@@ -924,9 +958,9 @@ bot.on('message:text', async (ctx) => {
 			"- ✅ Установить банковские реквизиты родственников безвестно отсутствующих военнослужащих для выплаты ежемесячного денежного довольствия\n"+
 			"- ✅ Узнать статус военнослужащего или связаться с представителями горячей линии\n"
 		);
-		userState[userId] = { step: 'select_unit' };
+		userState[userId] = { step: 'select_unit', lastActivity: Date.now() };
 		state = userState[userId];
-		if (!state) return;	
+		if (!state) return;
 		await showMenuSelection(ctx);
 		break;
 	}
@@ -943,4 +977,3 @@ bot
 	.start()
 	.then(() => console.log('Бот успешно запущен!'))
 	.catch((err) => console.error('Ошибка при запуске бота:', err));
-
